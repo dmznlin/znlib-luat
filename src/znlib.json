@@ -1,5 +1,5 @@
 {
-  "up_log": 600,
+  "up_log": 1800,
   "ota": {
     "enable": true,
     "update": 86400000

@@ -19,12 +19,9 @@ function MQTT:new()
   return obj
 end
 
---[[
-  date: 2025-05-07
-  parm: id,客户端标识;cfg_name,配置项
-  desc: 创建mqtt客户端并连接到服务器
---]]
----@param client_id string
+---根据cfg_name连接mqtt-broker
+---@param client_id string 客户端标识
+---@param cfg_name string|nil 配置名称
 ---@return boolean
 function MQTT:open(client_id, cfg_name)
   if mqtt == nil then
@@ -89,7 +86,7 @@ function MQTT:open(client_id, cfg_name)
   self.client:on(function (client, event, topic, payload)
     if event == "conack" then
       local topics = {}
-      for k, v in pairs(self.pubs) do
+      for k, v in pairs(self.subs) do
         topics[v.topic] = v.qos
       end
 
@@ -115,11 +112,16 @@ function MQTT:open(client_id, cfg_name)
   return self.client:ready()
 end
 
+---发布消息
 ---@param topic string|nil 主题
 ---@param payload string 数据
 ---@param qos integer|nil 质量
 ---@return integer 消息id
 function MQTT:publish(topic, payload, qos)
+  if payload == nil or #payload < 1 then
+    return 0
+  end
+
   if topic == nil then
     local def = self.pubs[self.pub_def]
     topic = def.topic
@@ -143,3 +145,45 @@ function MQTT:ready()
 end
 
 return MQTT
+
+--[[-----------------------------------------------------------------------------
+--mqtt client
+local mqttc = nil
+
+---发送数据
+---@param data string 数据
+---@param topic string|nil 主题
+---@param qos number|nil 消息级别
+function Mqtt_send(data, topic, qos)
+  if mqttc and mqttc:ready() then --mqtt connected
+    qos = (qos ~= nil) and qos or 0
+    mqttc:publish(topic, data, qos)
+  end
+end
+
+sys.taskInit(function ()
+  --等待联网
+  local _, id = sys.waitUntil(Status_Net_Ready)
+  --创建实例
+  mqttc = require("znlib_mqtt"):new()
+
+  if not mqttc:open(id) then
+    log.info(tag, "启动 mqtt 失败")
+    return
+  end
+
+  --注册日志上行
+  Event:register_callback(EventType_MQTT_LOG, function (event)
+    local dt = { cmd = Cmd_Run_log, log = event }
+    Mqtt_send(json.encode(dt))
+  end)
+end)
+
+sys.taskInit(function ()
+  while true do
+    local ret, topic, data, id = sys.waitUntil(Status_Mqtt_SubData)
+    log.info(tag, topic, data, id)
+    -- do your work
+  end
+end)
+-------------------------------------------------------------------------------]]

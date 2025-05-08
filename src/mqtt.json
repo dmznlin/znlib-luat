@@ -5,7 +5,7 @@
   "client_id": "$id$",
   "user_name": "user_etc",
   "password": "user_etc",
-  "keep_alive": 1000,
+  "keep_alive": 240,
   "re_conn": 5000,
   "subs": {
     "own": {
