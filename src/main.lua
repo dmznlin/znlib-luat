@@ -6,6 +6,9 @@ PROJECT = "iot-4g"
 VERSION = "1.0.1"
 -- luatools needs
 
+PRODUCT_KEY = ""
+--在线升级
+
 _G.isDebug = true
 --true: 调试模式开
 log.setLevel("INFO")
@@ -26,30 +29,37 @@ sys.taskInit(function ()
 end)
 
 ---------------------------------------------------------------------------------
-_G.znlib = require("znlib")       --common lib
 _G.utils = require("znlib_utils") --global utils
+_G.znlib = require("znlib")       --common lib
 
-log.info(string.format("启动中，系统:%s 内核:%s 标识:%s", VERSION, rtos.version(), device_id))
 --休眠唤醒后,重启系统
 if znlib.low_power_awake() then return end
 
+--开始启动业务
+log.info(string.format("启动中，系统:%s 内核:%s 标识:%s", VERSION, rtos.version(), device_id))
+
+--板载指示灯
+_G.led = require("znlib_led")
+
 sys.taskInit(function ()
-  --联网
+  --开始联网
   znlib.conn_net()
 end)
 
 sys.taskInit(function ()
-  --NTP
+  --时钟同步
   znlib.online_ntp()
 end)
 
 sys.taskInit(function ()
-  --定时低功耗
+  --定时休眠
   znlib.low_power_check()
 end)
 
---板载指示灯
-local _ = require("znlib_led")
+sys.taskInit(function ()
+  --在线升级
+  znlib.ota_online()
+end)
 
 --代码结束
 sys.run()

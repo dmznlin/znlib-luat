@@ -1,0 +1,17 @@
+{
+  "up_log": 600,
+  "ota": {
+    "enable": true,
+    "update": 86400000
+  },
+  "ntp": {
+    "enable": true,
+    "fresh": 86400000,
+    "retry": 3600000
+  },
+  "low_power": {
+    "enable": false,
+    "start": "22:00:00",
+    "exit": "07:00:00"
+  }
+}

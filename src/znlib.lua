@@ -35,18 +35,80 @@ Status_Mqtt_PubData = "mqtt_pub"
 device_id = mcu.unique_id():toHex()
 --设备ID,联网后会更新
 
-local time_low_power = "22:00:00"
---时间: 低功耗开启
-local time_low_exit = "07:00:00"
---时间: 低功耗退出
+--全局消息管理
+Event = require("znlib_event")
 
-local ntp_enabled = true
-local ntp_refresh = 3600000 * 24
-local ntp_retry = 3600000
---NTP配置参数
+--通过mqtt发送日志
+EventType_MQTT_LOG = "mqtt_log"
 
 local pm_a, pm_b, pm_reason = pm.lastReson()
 --开机原因,用于判断是从休眠模块开机,还是电源/复位开机
+
+local options = {
+  up_log = 600,            --上行日志超时(秒)
+  ota = {
+    enable = true,         --ota启用
+    update = 3600000 * 24, --更新间隔(毫秒)
+  },
+  low_power = {
+    enable = true,      --低功耗启用
+    start = "22:00:00", --时间: 低功耗开启,
+    exit = "07:00:00",  --时间: 低功耗退出
+  },
+  ntp = {
+    enable = true,        --ntp启用
+    fresh = 3600000 * 24, --刷新间隔(毫秒)
+    retry = 3600000       --异常后重试间隔(毫秒)
+  }
+}
+
+---------------------------------------------------------------------------------
+--远程日志超时计时
+local remote_log_init = 0
+
+--- 设置远程日志计时
+--- @param val number
+function znlib.remote_log_set(val)
+  remote_log_init = val
+end
+
+--[[
+  date: 2025-05-03
+  parm: event,日志;remote,是否发送远程
+  desc: 打印运行日志
+--]]
+--- @param event string
+--- @param remote boolean|nil
+function znlib.show_log(event, remote, level)
+  if (#event) < 1 then -- empty
+    return
+  end
+
+  level = (level ~= nil) and level or log.LOG_INFO               --默认: info
+  remote = (remote ~= nil) and remote or false                   --默认: 仅本地
+  remote = remote and (remote_log_init > 0) and
+      (os.difftime(os.time(), remote_log_init) < options.up_log) --10分钟内有效
+
+  if remote_log_init > 0 and (not remote) then
+    remote_log_init = 0
+  end
+
+  if level == log.LOG_INFO then
+    log.info(event)
+  end
+
+  if level == log.LOG_WARN then
+    log.warn(event)
+  end
+
+  if level == log.LOG_ERROR then
+    log.error(event)
+  end
+
+  if remote then --mqtt
+    Event:trigger_callback(EventType_MQTT_LOG, event)
+  end
+end
 
 ---------------------------------------------------------------------------------
 --[[
@@ -95,7 +157,7 @@ function znlib.low_power_check()
     log.info(tag, "PM: 充电开机")
   end
 
-  if isDebug then --开发时不启用
+  if not options.low_power.enable then --不启用
     return
   end
 
@@ -106,9 +168,9 @@ function znlib.low_power_check()
   --低功耗开启
   local lp_enabled = true
   --低功耗开启
-  local l_h, l_m, l_s = time_low_power:match("(%d+):(%d+):(%d+)")
+  local l_h, l_m, l_s = options.low_power.start:match("(%d+):(%d+):(%d+)")
   --低功耗退出
-  local e_h, e_m, e_s = time_low_exit:match("(%d+):(%d+):(%d+)")
+  local e_h, e_m, e_s = options.low_power.exit:match("(%d+):(%d+):(%d+)")
 
   while true do
     ::continue::                                             --跳转坐标
@@ -258,7 +320,7 @@ end
   sntp内置了几个常用的ntp服务器, 也支持自选服务器
 --]]
 function znlib.online_ntp()
-  if not ntp_enabled then return end
+  if not options.ntp.enable then return end
   sys.waitUntil(Status_Net_Ready)
   sys.wait(1000)
 
@@ -272,43 +334,59 @@ function znlib.online_ntp()
     if ret then
       log.info(tag, "NTP: 时间同步成功 " .. os.date("%Y-%m-%d %H:%M:%S"))
       --每天一次
-      sys.wait(ntp_refresh)
+      sys.wait(options.ntp.fresh)
     else
       log.info(tag, "NTP: 时间同步失败")
-      sys.wait(ntp_retry) -- 1小时后重试
+      sys.wait(options.ntp.retry) -- 1小时后重试
     end
   end
 end
 
 ---------------------------------------------------------------------------------
---[[
-  date: 2025-05-07
-  desc: 加载基本参数
---]]
-function znlib.init()
-  local cfg = require("znlib_cfg").load_default(tag, {})
-  local node = cfg.low_power
-  if node ~= nil then
-    time_low_power = node.start --时间: 低功耗开启
-    time_low_exit = node.exit   --时间: 低功耗退出
-  end
-
-  if cfg.low_exit ~= nil then
-    time_low_exit = cfg.low_exit
-  end
-
-  log.info(tag, "low-power", time_low_power, time_low_exit)
-  --显示休眠参数
-
-  node = cfg.ntp
-  if node ~= nil then --ntp
-    ntp_enabled = node.enable
-    ntp_refresh = node.fresh
-    ntp_retry = node.retry
+local ota_opts = {}
+local function ota_cb(ret)
+  if ret == 0 then
+    log.info("OTA: 下载成功,升级中...", true)
+    rtos.reboot()
+  elseif ret == 1 then
+    znlib.show_log("OTA: 连接失败,请检查url或服务器配置(是否为内网)", true)
+  elseif ret == 2 then
+    znlib.show_log("OTA: url错误")
+  elseif ret == 3 then
+    znlib.show_log("OTA: 服务器断开,检查服务器白名单配置", true)
+  elseif ret == 4 then
+    znlib.show_log("OTA: 接收报文错误,检查模块固件或升级包内文件是否正常", true)
+  elseif ret == 5 then
+    znlib.show_log("OTA: 版本号错误(xxx.yyy.zzz)", true)
+  else
+    znlib.show_log("OTA: 未定义错误 " .. tostring(ret), true)
   end
 end
 
---初始化
-znlib.init()
+-- 使用iot平台进行升级
+function znlib.ota_online()
+  if not options.ota.enable then return end
+  sys.waitUntil(Status_Net_Ready)
+  local first = true
+
+  while true do
+    if first then --启动时检查1次
+      first = false
+    else
+      sys.waitUntil(Status_OTA_Update, options.ota.update) --默认每天1检
+    end
+
+    znlib.show_log("OTA: 开始新版本确认", true)
+    sys.wait(500)
+    libfota2.request(ota_cb, ota_opts)
+  end
+end
+
+---------------------------------------------------------------------------------
+--加载配置
+options = require("znlib_cfg").load_default(tag, options)
+log.info(tag, "ota", utils.table_to_str(options.ota))
+log.info(tag, "ntp", utils.table_to_str(options.ntp))
+log.info(tag, "low_power", utils.table_to_str(options.low_power))
 
 return znlib

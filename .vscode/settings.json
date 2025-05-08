@@ -14,7 +14,8 @@
         "zbuff",
         "utils",
         "znlib",
-        "sntp"
+        "sntp",
+        "unregister"
     ],
     "Lua.diagnostics.globals": [
         "log",
