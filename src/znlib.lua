@@ -45,7 +45,7 @@ local pm_a, pm_b, pm_reason = pm.lastReson()
 --开机原因,用于判断是从休眠模块开机,还是电源/复位开机
 
 local options = {
-  up_log = 600,            --上行日志超时(秒)
+  up_log = 1800,           --上行日志超时(秒)
   ota = {
     enable = true,         --ota启用
     update = 3600000 * 24, --更新间隔(毫秒)
@@ -66,19 +66,15 @@ local options = {
 --远程日志超时计时
 local remote_log_init = 0
 
---- 设置远程日志计时
---- @param val number
+---设置远程日志计时
+---@param val number
 function znlib.remote_log_set(val)
   remote_log_init = val
 end
 
---[[
-  date: 2025-05-03
-  parm: event,日志;remote,是否发送远程
-  desc: 打印运行日志
---]]
---- @param event string
---- @param remote boolean|nil
+---本地输出日志,或上行至服务器
+---@param event string 日志
+---@param remote boolean|nil 是否上行
 function znlib.show_log(event, remote, level)
   if (#event) < 1 then -- empty
     return
@@ -111,10 +107,7 @@ function znlib.show_log(event, remote, level)
 end
 
 ---------------------------------------------------------------------------------
---[[
-  date: 2025-05-07
-  desc: 低功耗唤醒
---]]
+---低功耗唤醒
 ---@return boolean
 function znlib.low_power_awake()
   --pm_a: 0-上电/复位开机, 1-RTC开机, 2-WakeupIn/Pad/IO开机, 3-未知原因
@@ -253,11 +246,11 @@ function znlib.low_power_check()
     pm.dtimerStart(2, keep * 1000)
 
     --[[
-          IDLE   正常运行,就是无休眠
-          LIGHT  轻休眠, CPU停止, RAM保持, 外设保持, 可中断唤醒. 部分型号支持从休眠处继续运行
-          DEEP   深休眠, CPU停止, RAM掉电, 仅特殊引脚保持的休眠前的电平, 大部分管脚不能唤醒设备.
-          HIB    彻底休眠, CPU停止, RAM掉电, 仅复位/特殊唤醒管脚可唤醒设备.
-        --]]
+      IDLE   正常运行,就是无休眠
+      LIGHT  轻休眠, CPU停止, RAM保持, 外设保持, 可中断唤醒. 部分型号支持从休眠处继续运行
+      DEEP   深休眠, CPU停止, RAM掉电, 仅特殊引脚保持的休眠前的电平, 大部分管脚不能唤醒设备.
+      HIB    彻底休眠, CPU停止, RAM掉电, 仅复位/特殊唤醒管脚可唤醒设备.
+    --]]
     pm.request(pm.DEEP)
   end
 end
@@ -366,9 +359,10 @@ end
 -- 使用iot平台进行升级
 function znlib.ota_online()
   if not options.ota.enable then return end
+  local libfota2 = require("libfota2")
   sys.waitUntil(Status_Net_Ready)
-  local first = true
 
+  local first = true
   while true do
     if first then --启动时检查1次
       first = false

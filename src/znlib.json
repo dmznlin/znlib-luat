@@ -10,7 +10,7 @@
     "retry": 3600000
   },
   "low_power": {
-    "enable": false,
+    "enable": true,
     "start": "22:00:00",
     "exit": "07:00:00"
   }

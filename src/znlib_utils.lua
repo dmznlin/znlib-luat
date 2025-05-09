@@ -139,19 +139,16 @@ end
   desc: 将str转为16进制表示
 --]]
 function utils.str_to_hex(str)
-  local first = true
   return string.gsub(str, "(.)", function (x)
-    local ret = string.format(first and "%02X" or " %02X", string.byte(x))
-    if first then first = false end
-    return ret
-  end)
+    return string.format("%02X ", string.byte(x))
+  end):gsub(" $", "") --去除末尾空格
 end
 
 --[[
-    date: 2025-05-04
-    parm: 16进制字符串(55 AA)
-    desc: 将hex转为字符串
-  --]]
+  date: 2025-05-04
+  parm: 16进制字符串(55 AA)
+  desc: 将hex转为字符串
+--]]
 function utils.str_from_hex(hex)
   local str = hex:gsub("[%s%p]", ""):upper()
   return str:gsub("%x%x", function (c)
@@ -159,11 +156,72 @@ function utils.str_from_hex(hex)
   end)
 end
 
+---将val转为指定长度的16进制字符串
+---@param val number 数值
+---@param len number|nil 有效长度(4,8)
+---@param le boolean|nil 小端处理
+---@return string
+function utils.str_hex_val(val, len, le)
+  len = (len ~= nil) and len or 8
+  if not utils.val_in_set(len, { 4, 8 }) then
+    return ""
+  end
+
+  local str = string.format("%08x", val):upper()
+  if len < 8 then
+    str = string.sub(str, 8 - len + 1, 8)
+  end
+
+  local pairs = {}
+  if le == nil or le then --小端
+    for i = 1, #str, 2 do
+      table.insert(pairs, string.sub(str, i, i + 1))
+    end
+  else --大端
+    for i = len, 2, -2 do
+      table.insert(pairs, string.sub(str, i - 1, i))
+    end
+  end
+
+  return table.concat(pairs, " ")
+end
+
+--计算val的异或校验值
+---@param val string 数据
+---@param i number|nil 开始位置
+---@param j number|nil 结束位置
+function utils.str_bcc(val, i, j)
+  i = (i ~= nil) and i or 1
+  j = (j ~= nil) and j or #val
+  log.info(tag, i, j)
+
+  local bcc = 0
+  for k = i, j do
+    bcc = bcc ~ string.byte(val, k)
+  end
+
+  return string.format("%02x", bcc)
+end
+
+---判断val是否在set集合中
+---@param val number|string 数值
+---@param set table 集合
+---@return boolean
+function utils.val_in_set(val, set)
+  for _, value in pairs(set) do
+    if val == value then
+      return true
+    end
+  end
+
+  return false
+end
+
 --[[
-    date: 2025-05-05
-    parm: 时间字符串
-    desc: 将sTime转为日期格式
-  --]]
+  date: 2025-05-05
+  parm: 时间字符串
+  desc: 将sTime转为日期格式
+--]]
 function utils.time_from_str(sTime)
   local year, month, day, hour, minute, second = sTime:match("(%d+)-(%d+)-(%d+) (%d+):(%d+):(%d+)")
   return os.time({
@@ -177,10 +235,10 @@ function utils.time_from_str(sTime)
 end
 
 --[[
-    date: 2025-05-07
-    parm: 字节
-    desc: 将val转为bit数组
-  --]]
+  date: 2025-05-07
+  parm: 字节
+  desc: 将val转为bit数组
+--]]
 function utils.byte_to_bit(val)
   local bits = {}
   for i = 7, 0, -1 do
