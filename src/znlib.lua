@@ -41,6 +41,9 @@ Event = require("znlib_event")
 --通过mqtt发送日志
 EventType_MQTT_LOG = "mqtt_log"
 
+--本地时间与UTC差值
+Time_zone_diff = utils.time_get_zone()
+
 local pm_a, pm_b, pm_reason = pm.lastReson()
 --开机原因,用于判断是从休眠模块开机,还是电源/复位开机
 
@@ -191,7 +194,7 @@ function znlib.low_power_check()
         hour = l_h,
         min = l_m,
         sec = l_s
-      }) - 3600 * 8
+      })
 
       local l_out = os.time({ --退出时间
         year = dt.year,
@@ -200,7 +203,7 @@ function znlib.low_power_check()
         hour = e_h,
         min = e_m,
         sec = e_s
-      }) - 3600 * 8
+      })
 
       if l_in > l_out then --跨天退出
         dt = os.date("*t", cur + 24 * 3600);
@@ -211,13 +214,13 @@ function znlib.low_power_check()
           hour = e_h,
           min = e_m,
           sec = e_s
-        }) - 3600 * 8
+        })
       end
 
       --[[log.info("PM: 计时", os.date("%y-%m-%d %H:%M:%S", cur),
             os.date("%y-%m-%d %H:%M:%S", l_in),
             os.date("%y-%m-%d %H:%M:%S", l_out))
-          --]]
+      --]]
 
       if (cur < l_in) or (cur > l_out) then --未到时间,已超时
         goto continue

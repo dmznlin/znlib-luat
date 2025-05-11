@@ -133,22 +133,20 @@ function utils.sys_info()
   return info
 end
 
---[[
-  date: 2025-05-04
-  parm: 字符串
-  desc: 将str转为16进制表示
---]]
+---将str转为16进制表示
+---@param str string 字符串
+---@return string
+---@return number
 function utils.str_to_hex(str)
   return string.gsub(str, "(.)", function (x)
     return string.format("%02X ", string.byte(x))
   end):gsub(" $", "") --去除末尾空格
 end
 
---[[
-  date: 2025-05-04
-  parm: 16进制字符串(55 AA)
-  desc: 将hex转为字符串
---]]
+---将hex转为字符串
+---@param hex string 16进制字符串
+---@return string
+---@return number
 function utils.str_from_hex(hex)
   local str = hex:gsub("[%s%p]", ""):upper()
   return str:gsub("%x%x", function (c)
@@ -156,12 +154,48 @@ function utils.str_from_hex(hex)
   end)
 end
 
+--计算val的异或校验值
+---@param val string 数据
+---@param i number|nil 开始位置
+---@param j number|nil 结束位置
+---@param hex boolean|nil 16进制
+---@return string|number
+function utils.str_bcc(val, i, j, hex)
+  i = (i ~= nil) and i or 1
+  j = (j ~= nil) and j or #val
+
+  local bcc = 0
+  for k = i, j do
+    bcc = bcc ~ string.byte(val, k)
+  end
+
+  if (hex == nil) or hex then
+    return string.format("%02x", bcc):upper()
+  else
+    return bcc
+  end
+end
+
+---判断val是否在set集合中
+---@param val number|string 数值
+---@param set table 集合
+---@return boolean
+function utils.val_in_set(val, set)
+  for _, value in pairs(set) do
+    if val == value then
+      return true
+    end
+  end
+
+  return false
+end
+
 ---将val转为指定长度的16进制字符串
 ---@param val number 数值
 ---@param len number|nil 有效长度(4,8)
 ---@param le boolean|nil 小端处理
 ---@return string
-function utils.str_hex_val(val, len, le)
+function utils.val_to_hex(val, len, le)
   len = (len ~= nil) and len or 8
   if not utils.val_in_set(len, { 4, 8 }) then
     return ""
@@ -186,45 +220,58 @@ function utils.str_hex_val(val, len, le)
   return table.concat(pairs, " ")
 end
 
---计算val的异或校验值
----@param val string 数据
----@param i number|nil 开始位置
----@param j number|nil 结束位置
-function utils.str_bcc(val, i, j)
-  i = (i ~= nil) and i or 1
-  j = (j ~= nil) and j or #val
-  log.info(tag, i, j)
-
-  local bcc = 0
-  for k = i, j do
-    bcc = bcc ~ string.byte(val, k)
+---使用字节值构建一个数值
+---@param ... number 字节值
+---@return number
+function utils.val_from_byte(...)
+  local bytes = { ... }
+  local is_be = false -- 默认小端序
+  if type(bytes[1]) == 'boolean' then
+    is_be = bytes[1] == true
+    table.remove(bytes, 1)
   end
 
-  return string.format("%02x", bcc)
-end
+  local num_bytes = #bytes
+  if not utils.val_in_set(num_bytes, { 2, 4 }) then
+    return 0
+  end
 
----判断val是否在set集合中
----@param val number|string 数值
----@param set table 集合
----@return boolean
-function utils.val_in_set(val, set)
-  for _, value in pairs(set) do
-    if val == value then
-      return true
+  local result = 0
+  for i, byte in ipairs(bytes) do
+    if byte < 0 or byte > 255 then
+      log.error(tag, "每个字节必须是0到255之间的整数")
+      return 0
+    end
+
+    byte = byte & 0xFF -- 确保只保留8位
+    if is_be then
+      result = result + byte << (8 * (i - 1))
+    else
+      result = result + byte << (8 * (num_bytes - i))
     end
   end
 
-  return false
+  -- 处理符号（针对有符号整数）
+  if num_bytes == 2 then
+    if result >= 0x8000 then
+      result = result - 0x10000
+    end
+  elseif num_bytes == 4 then
+    if result >= 0x80000000 then
+      result = result - 0x100000000
+    end
+  end
+
+  return result
 end
 
---[[
-  date: 2025-05-05
-  parm: 时间字符串
-  desc: 将sTime转为日期格式
---]]
-function utils.time_from_str(sTime)
+---将sTime转为时间
+---@param sTime string 时间字符串(y-m-d h:m:s)
+---@param zone boolean|nil 添加时区
+---@return number
+function utils.time_from_str(sTime, zone)
   local year, month, day, hour, minute, second = sTime:match("(%d+)-(%d+)-(%d+) (%d+):(%d+):(%d+)")
-  return os.time({
+  local ret = os.time({
     year = year,
     month = month,
     day = day,
@@ -232,14 +279,66 @@ function utils.time_from_str(sTime)
     min = minute,
     sec = second
   })
+
+  if zone then
+    return ret + utils.time_get_zone()
+  else
+    return ret
+  end
 end
 
---[[
-  date: 2025-05-07
-  parm: 字节
-  desc: 将val转为bit数组
---]]
+---将sTime转为字符串
+---@param sTime any
+---@zone boolean|nil 添加时区
+---@return string|osdate
+function utils.time_to_str(sTime, zone)
+  if zone then
+    sTime = sTime + utils.time_get_zone()
+  end
+  return os.date("%Y-%m-%d %H:%M:%S", sTime)
+end
+
+---计算系统时区
+---@param str boolean|nil 返回文本描述
+---@return string|number
+function utils.time_get_zone(str)
+  local now = os.time()
+  local utc = os.date("!*t", now)
+  local offset = os.difftime(now, os.time({
+    year = utc.year,
+    month = utc.month,
+    day = utc.day,
+    hour = utc.hour,
+    min = utc.min,
+    sec = utc.sec
+  }))
+
+  if not str then
+    return offset
+  end
+
+  -- 转换为小时和分钟
+  local hours = math.floor(offset / 3600)
+  local minutes = math.floor((offset % 3600) / 60)
+
+  -- 处理半小时的情况，如+05:30
+  local secs = offset % 60
+  if secs ~= 0 then
+    minutes = minutes + (secs / 60)
+  end
+
+  return string.format("%02d:%02d", hours, minutes)
+end
+
+---拆分字节为8个位
+---@param val number 数值
+---@return table
 function utils.byte_to_bit(val)
+  if val < 0 or val > 255 then
+    log.error(tag, "字节值在0-255区间")
+    return {}
+  end
+
   local bits = {}
   for i = 7, 0, -1 do
     -- 右移 i 位，并与 1 进行按位与操作
@@ -250,11 +349,31 @@ function utils.byte_to_bit(val)
   return bits
 end
 
---[[
-  date: 2025-05-01
-  parm: value 字符串
-  desc: 字符串转table
---]]
+---组合8个位为一个值
+---@param val table 位组
+---@return number
+function utils.byte_from_bit(val)
+  if #val ~= 8 then
+    log.error(tag, "构建byte需要8个位")
+    return 0
+  end
+
+  local byte = 0
+  for k, v in pairs(val) do
+    if v ~= 0 and v ~= 1 then
+      log.error(tag, "构建byte必须为0,1")
+      return 0
+    end
+
+    byte = byte | v << 8 - k
+  end
+  return byte
+end
+
+---字符串转table
+---@param value string 字符串
+---@return table|nil
+---@return string|nil
 function utils.table_from_str(value)
   if not value or value == "" then
     return nil, "table string empty"
@@ -275,11 +394,10 @@ function utils.table_from_str(value)
   return result or {}
 end
 
---[[
-  date: 2025-05-01
-  parm: precision 浮点精度,默认2
-  desc: table转字符串
---]]
+---table转字符串
+---@param tbl table
+---@param precision number|nil 浮点精度,默认2
+---@return string
 function utils.table_to_str(tbl, precision)
   local to_str = function (value)
     if type(value) == 'table' then
@@ -323,11 +441,10 @@ function utils.table_to_str(tbl, precision)
   return ret
 end
 
---[[
-  date: 2025-05-07
-  parm: old,原内容;new,新内容
-  desc: 替换table中的内容
---]]
+---替换table中的内容
+---@param tbl table
+---@param old string 原内容 or 正则
+---@param new string 新内容
 function utils.table_replace(tbl, old, new)
   for k, v in pairs(tbl) do
     if type(v) == "string" then
