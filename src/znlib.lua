@@ -35,12 +35,6 @@ Status_Mqtt_PubData = "mqtt_pub"
 device_id = mcu.unique_id():toHex()
 --设备ID,联网后会更新
 
---全局消息管理
-Event = require("znlib_event")
-
---通过mqtt发送日志
-EventType_MQTT_LOG = "mqtt_log"
-
 --本地时间与UTC差值
 Time_zone_diff = utils.time_get_zone()
 
@@ -66,6 +60,12 @@ local options = {
 }
 
 ---------------------------------------------------------------------------------
+--全局消息管理
+Event = require("znlib_event")
+
+--通过mqtt发送日志
+EventType_MQTT_LOG = "mqtt_log"
+
 --远程日志超时计时
 local remote_log_init = 0
 
@@ -77,35 +77,35 @@ end
 
 ---本地输出日志,或上行至服务器
 ---@param event string 日志
----@param remote boolean|nil 是否上行
-function znlib.show_log(event, remote, level)
+---@param log_tag string|nil 标识符
+function znlib.show_log(event, log_tag, level)
   if (#event) < 1 then -- empty
     return
   end
 
+  log_tag = (log_tag ~= nil) and log_tag or tag                  --日志标识符
   level = (level ~= nil) and level or log.LOG_INFO               --默认: info
-  remote = (remote ~= nil) and remote or false                   --默认: 仅本地
-  remote = remote and (remote_log_init > 0) and
-      (os.difftime(os.time(), remote_log_init) < options.up_log) --10分钟内有效
+  local remote = (remote_log_init > 0) and
+      (os.difftime(os.time(), remote_log_init) < options.up_log) --30分钟内有效
 
   if remote_log_init > 0 and (not remote) then
     remote_log_init = 0
   end
 
   if level == log.LOG_INFO then
-    log.info(event)
+    log.info(log_tag, event)
   end
 
   if level == log.LOG_WARN then
-    log.warn(event)
+    log.warn(log_tag, event)
   end
 
   if level == log.LOG_ERROR then
-    log.error(event)
+    log.error(log_tag, event)
   end
 
   if remote then --mqtt
-    Event:trigger_callback(EventType_MQTT_LOG, event)
+    Event:trigger_callback(EventType_MQTT_LOG, log_tag .. ": " .. event)
   end
 end
 
@@ -159,7 +159,7 @@ function znlib.low_power_check()
 
   --等待时间同步完成
   sys.waitUntil(Status_NTP_Ready)
-  log.info(tag, "PM: 开始低功耗计时")
+  znlib.show_log("开始低功耗计时", "PM")
 
   --低功耗开启
   local lp_enabled = true
@@ -174,9 +174,9 @@ function znlib.low_power_check()
     if ret then                                              --低功耗开关
       lp_enabled = (keep > 0) and true or false
       if lp_enabled then
-        log.info(tag, "PM: 低功耗已启用")
+        znlib.show_log("低功耗已启用", "PM")
       else
-        log.info(tag, "PM: 低功耗已关闭")
+        znlib.show_log("低功耗已关闭", "PM")
       end
     end
 
@@ -229,7 +229,7 @@ function znlib.low_power_check()
       keep = os.difftime(l_out, cur) --距离退出的秒数
     end
 
-    log.info("PM: 进入低功耗模,keep ", keep)
+    znlib.show_log("进入休眠模式,keep " .. tostring(keep), "PM")
     sys.wait(2000) --wait remote log
 
     --进入飞行模式
@@ -328,11 +328,11 @@ function znlib.online_ntp()
     -- 通常只需要几百毫秒就能成功
     local ret = sys.waitUntil(Status_NTP_Ready, 5000)
     if ret then
-      log.info(tag, "NTP: 时间同步成功 " .. os.date("%Y-%m-%d %H:%M:%S"))
+      znlib.show_log("时间同步成功 " .. os.date("%Y-%m-%d %H:%M:%S"), "NTP")
       --每天一次
       sys.wait(options.ntp.fresh)
     else
-      log.info(tag, "NTP: 时间同步失败")
+      znlib.show_log("时间同步失败", "NTP")
       sys.wait(options.ntp.retry) -- 1小时后重试
     end
   end
@@ -342,20 +342,21 @@ end
 local ota_opts = {}
 local function ota_cb(ret)
   if ret == 0 then
-    log.info("OTA: 下载成功,升级中...", true)
+    znlib.show_log("下载成功,升级中...", "OTA")
+    sys.wait(2000)
     rtos.reboot()
   elseif ret == 1 then
-    znlib.show_log("OTA: 连接失败,请检查url或服务器配置(是否为内网)", true)
+    znlib.show_log("连接失败,请检查url或服务器配置(是否为内网)", "OTA")
   elseif ret == 2 then
-    znlib.show_log("OTA: url错误")
+    znlib.show_log("url错误", "OTA")
   elseif ret == 3 then
-    znlib.show_log("OTA: 服务器断开,检查服务器白名单配置", true)
+    znlib.show_log("服务器断开,检查服务器白名单配置", "OTA")
   elseif ret == 4 then
-    znlib.show_log("OTA: 接收报文错误,检查模块固件或升级包内文件是否正常", true)
+    znlib.show_log("接收报文错误,检查模块固件或升级包内文件是否正常", "OTA")
   elseif ret == 5 then
-    znlib.show_log("OTA: 版本号错误(xxx.yyy.zzz)", true)
+    znlib.show_log("版本号错误(xxx.yyy.zzz)", "OTA")
   else
-    znlib.show_log("OTA: 未定义错误 " .. tostring(ret), true)
+    znlib.show_log("未定义错误 " .. tostring(ret), "OTA")
   end
 end
 
@@ -369,11 +370,12 @@ function znlib.ota_online()
   while true do
     if first then --启动时检查1次
       first = false
+      sys.wait(2000)
     else
       sys.waitUntil(Status_OTA_Update, options.ota.update) --默认每天1检
     end
 
-    znlib.show_log("OTA: 开始新版本确认", true)
+    znlib.show_log("开始新版本确认", "OTA")
     sys.wait(500)
     libfota2.request(ota_cb, ota_opts)
   end
