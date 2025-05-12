@@ -35,7 +35,7 @@ _G.znlib = require("znlib")       --common lib
 if znlib.low_power_awake() then return end
 
 --开始启动业务
-log.info(string.format("启动中，系统:%s 内核:%s 标识:%s", VERSION, rtos.version(), device_id))
+log.info(string.format("启动中，系统:%s 内核:%s 标识:%s", VERSION, rtos.version(), Device_ID))
 
 --板载指示灯
 _G.led = require("znlib_led")

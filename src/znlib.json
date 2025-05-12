@@ -1,7 +1,10 @@
 {
-  "up_log": 1800,
+  "log": {
+    "keep": 1800,
+    "start": 20
+  },
   "ota": {
-    "enable": true,
+    "enable": false,
     "update": 86400000
   },
   "ntp": {

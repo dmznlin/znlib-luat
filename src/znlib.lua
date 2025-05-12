@@ -42,7 +42,10 @@ local pm_a, pm_b, pm_reason = pm.lastReson()
 --开机原因,用于判断是从休眠模块开机,还是电源/复位开机
 
 local options = {
-  up_log = 1800,           --上行日志超时(秒)
+  log = {
+    keep = 1800, --上行日志保持(秒)
+    start = 20,  --开机上行启动日志(秒)
+  },
   ota = {
     enable = true,         --ota启用
     update = 3600000 * 24, --更新间隔(毫秒)
@@ -97,7 +100,7 @@ local remote_log_init = 0
 ---@param keep boolean|nil 保持
 function znlib.remote_log_set(val, keep)
   if keep then
-    remote_log_init = os.difftime(os.time(), options.up_log) + val
+    remote_log_init = os.time() - options.log.keep + val
   else
     remote_log_init = val
   end
@@ -111,13 +114,18 @@ function znlib.show_log(event, log_tag, level)
     return
   end
 
-  log_tag = (log_tag ~= nil) and log_tag or tag                  --日志标识符
-  level = (level ~= nil) and level or log.LOG_INFO               --默认: info
-  local remote = (remote_log_init > 0) and
-      (os.difftime(os.time(), remote_log_init) < options.up_log) --30分钟内有效
+  log_tag = (log_tag ~= nil) and log_tag or tag    --日志标识符
+  level = (level ~= nil) and level or log.LOG_INFO --默认: info
+  local remote = false
 
-  if remote_log_init > 0 and (not remote) then
-    remote_log_init = 0
+  if remote_log_init > 0 then
+    local cur = os.time()
+    --30分钟内有效
+    remote = (cur >= remote_log_init) and (cur - remote_log_init < options.log.keep)
+
+    if not remote then
+      remote_log_init = 0
+    end
   end
 
   if level == log.LOG_INFO then
@@ -222,7 +230,7 @@ function znlib.low_power_check()
         hour = l_h,
         min = l_m,
         sec = l_s
-      })
+      }) - Time_zone_diff
 
       local l_out = os.time({ --退出时间
         year = dt.year,
@@ -231,7 +239,7 @@ function znlib.low_power_check()
         hour = e_h,
         min = e_m,
         sec = e_s
-      })
+      }) - Time_zone_diff
 
       if l_in > l_out then --跨天退出
         dt = os.date("*t", cur + 24 * 3600);
@@ -242,7 +250,7 @@ function znlib.low_power_check()
           hour = e_h,
           min = e_m,
           sec = e_s
-        })
+        }) - Time_zone_diff
       end
 
       --[[log.info("PM: 计时", os.date("%y-%m-%d %H:%M:%S", cur),
@@ -348,6 +356,7 @@ function znlib.online_ntp()
   sys.waitUntil(Status_Net_Ready)
   sys.wait(1000)
 
+  local first = true
   while true do
     -- 使用内置的ntp服务器地址, 包括阿里ntp
     log.info(tag, "NTP: 开始同步时间")
@@ -356,6 +365,13 @@ function znlib.online_ntp()
     -- 通常只需要几百毫秒就能成功
     local ret = sys.waitUntil(Status_NTP_Ready, 5000)
     if ret then
+      if first then
+        first = false
+        if options.log.start > 0 then --开机后保持日志上行,用于跟踪日志
+          znlib.remote_log_set(options.log.start, true)
+        end
+      end
+
       znlib.show_log("时间同步成功 " .. os.date("%Y-%m-%d %H:%M:%S"), "NTP")
       --每天一次
       sys.wait(options.ntp.fresh)
@@ -412,8 +428,9 @@ end
 ---------------------------------------------------------------------------------
 --加载配置
 options = require("znlib_cfg").load_default(tag, options)
+log.info(tag, "log", utils.table_to_str(options.log))
 log.info(tag, "ota", utils.table_to_str(options.ota))
 log.info(tag, "ntp", utils.table_to_str(options.ntp))
-log.info(tag, "low_power", utils.table_to_str(options.low_power))
+log.info(tag, "power", utils.table_to_str(options.low_power))
 
 return znlib

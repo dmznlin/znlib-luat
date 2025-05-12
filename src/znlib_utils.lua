@@ -269,9 +269,18 @@ end
 ---@param str boolean|nil 返回文本描述
 ---@return string|number
 function utils.time_get_zone(str)
-  local now = os.time()
+  local now = utils.time_from_str("2000-01-01 00:00:00")
+  local loc = os.date("*t", now)
   local utc = os.date("!*t", now)
-  local offset = os.difftime(now, os.time({
+
+  local offset = os.difftime(os.time({
+    year = loc.year,
+    month = loc.month,
+    day = loc.day,
+    hour = loc.hour,
+    min = loc.min,
+    sec = loc.sec
+  }), os.time({
     year = utc.year,
     month = utc.month,
     day = utc.day,
