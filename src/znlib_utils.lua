@@ -1,91 +1,21 @@
 --[[-----------------------------------------------------------------------------
   作者： dmzn@163.com 2025-05-07
   描述： 辅助工具类
-
-  备注:
-  1.部分函数引用:
-    @author 杰神
-    @license GPLv3
 -------------------------------------------------------------------------------]]
 local tag = "utils"
 local utils = {}
 
---- 删除目录,以及下面所有的子目录和文件
----@param path string 目录
-function utils.remove_all(path)
-  local ret, data = io.lsdir(path, 50, 0)
-  if not ret then
-    return
-  end
+--本地时间与UTC差值(秒)
+Time_zone_diff = 8 * 3600
 
-  for _, e in ipairs(data) do
-    local fn = path .. e.name
-    if e.type == 1 then
-      utils.remove_all(fn .. "/")
-      log.info(tag, "remove dir", fn)
-      io.rmdir(fn)
-    else
-      os.remove(fn)
-      log.info(tag, "remove file", fn)
-    end
-  end
-
-  -- 继续遍历
-  if #data == 50 then
-    utils.remove_all(path)
-  end
-end
-
-function utils.walk(path, results, offset)
-  log.info(tag, "walk")
-  offset = offset or 0
-
-  local ret, data = io.lsdir(path, 50, offset)
-  if not ret then
-    return
-  end
-
-  for _, e in ipairs(data) do
-    local fn = path .. e.name
-    if e.type == 1 then
-      log.info(tag, "walk", fn)
-      utils.walk(fn .. "/", results)
-    else
-      log.info(tag, "walk", fn, e.size)
-      if results then
-        table.insert(results, {
-          name = fn,
-          size = e.size
-        })
-      end
-    end
-  end
-
-  -- 继续遍历
-  if #data == 50 then
-    utils.walk(path, results, offset + 50)
-  end
-end
-
-function utils.inspect(data, prefix)
-  prefix = prefix or ""
-
-  local tp = type(data)
-  log.info(tag, "inspect", prefix, tp, data)
-
-  if tp == "table" then
-    for k, v in pairs(data) do
-      if v ~= data then
-        utils.inspect(v, prefix .. "." .. k)
-      end
-    end
-  end
+function utils.init()
+  --校准时区
+  Time_zone_diff = utils.time_get_zone()
 end
 
 ---------------------------------------------------------------------------------
 local id_base = 0  --序列基准
 local id_date = "" --时间基准
-
 --[[
   描述: 生成业务流水号
   格式:
@@ -133,6 +63,7 @@ function utils.sys_info()
   return info
 end
 
+---------------------------------------------------------------------------------
 ---将str转为16进制表示
 ---@param str string 字符串
 ---@return string
@@ -176,160 +107,7 @@ function utils.str_bcc(val, i, j, hex)
   end
 end
 
----判断val是否在set集合中
----@param val number|string 数值
----@param set table 集合
----@return boolean
-function utils.val_in_set(val, set)
-  for _, value in pairs(set) do
-    if val == value then
-      return true
-    end
-  end
-
-  return false
-end
-
----将val转为指定长度的16进制字符串
----@param val number 数值
----@param len number|nil 有效长度(4,8)
----@param le boolean|nil 小端处理
----@return string
-function utils.val_to_hex(val, len, le)
-  len = (len ~= nil) and len or 8
-  if not utils.val_in_set(len, { 4, 8 }) then
-    return ""
-  end
-
-  local str = string.format("%08x", val):upper()
-  if len < 8 then
-    str = string.sub(str, 8 - len + 1, 8)
-  end
-
-  local pairs = {}
-  if le == nil or le then --小端
-    for i = 1, #str, 2 do
-      table.insert(pairs, string.sub(str, i, i + 1))
-    end
-  else --大端
-    for i = len, 2, -2 do
-      table.insert(pairs, string.sub(str, i - 1, i))
-    end
-  end
-
-  return table.concat(pairs, " ")
-end
-
----使用字节值构建一个数值
----@param ... number 字节值
----@return number
-function utils.val_from_byte(...)
-  local bytes = { ... }
-  local is_be = false -- 默认小端序
-  if type(bytes[1]) == 'boolean' then
-    is_be = bytes[1] == true
-    table.remove(bytes, 1)
-  end
-
-  local num_bytes = #bytes
-  if not utils.val_in_set(num_bytes, { 2, 4 }) then
-    return 0
-  end
-
-  local result = 0
-  for i, byte in ipairs(bytes) do
-    if byte < 0 or byte > 255 then
-      log.error(tag, "每个字节必须是0到255之间的整数")
-      return 0
-    end
-
-    byte = byte & 0xFF -- 确保只保留8位
-    if is_be then
-      result = result + byte << (8 * (i - 1))
-    else
-      result = result + byte << (8 * (num_bytes - i))
-    end
-  end
-
-  -- 处理符号（针对有符号整数）
-  if num_bytes == 2 then
-    if result >= 0x8000 then
-      result = result - 0x10000
-    end
-  elseif num_bytes == 4 then
-    if result >= 0x80000000 then
-      result = result - 0x100000000
-    end
-  end
-
-  return result
-end
-
----将sTime转为时间
----@param sTime string 时间字符串(y-m-d h:m:s)
----@param zone boolean|nil 添加时区
----@return number
-function utils.time_from_str(sTime, zone)
-  local year, month, day, hour, minute, second = sTime:match("(%d+)-(%d+)-(%d+) (%d+):(%d+):(%d+)")
-  local ret = os.time({
-    year = year,
-    month = month,
-    day = day,
-    hour = hour,
-    min = minute,
-    sec = second
-  })
-
-  if zone then
-    return ret + utils.time_get_zone()
-  else
-    return ret
-  end
-end
-
----将sTime转为字符串
----@param sTime any
----@zone boolean|nil 添加时区
----@return string|osdate
-function utils.time_to_str(sTime, zone)
-  if zone then
-    sTime = sTime + utils.time_get_zone()
-  end
-  return os.date("%Y-%m-%d %H:%M:%S", sTime)
-end
-
----计算系统时区
----@param str boolean|nil 返回文本描述
----@return string|number
-function utils.time_get_zone(str)
-  local now = os.time()
-  local utc = os.date("!*t", now)
-  local offset = os.difftime(now, os.time({
-    year = utc.year,
-    month = utc.month,
-    day = utc.day,
-    hour = utc.hour,
-    min = utc.min,
-    sec = utc.sec
-  }))
-
-  if not str then
-    return offset
-  end
-
-  -- 转换为小时和分钟
-  local hours = math.floor(offset / 3600)
-  local minutes = math.floor((offset % 3600) / 60)
-
-  -- 处理半小时的情况，如+05:30
-  local secs = offset % 60
-  if secs ~= 0 then
-    minutes = minutes + (secs / 60)
-  end
-
-  return string.format("%02d:%02d", hours, minutes)
-end
-
+---------------------------------------------------------------------------------
 ---拆分字节为8个位
 ---@param val number 数值
 ---@return table
@@ -370,6 +148,156 @@ function utils.byte_from_bit(val)
   return byte
 end
 
+---判断val是否在set集合中
+---@param val number|string 数值
+---@param set table 集合
+---@return boolean
+function utils.val_in_set(val, set)
+  for _, value in pairs(set) do
+    if val == value then
+      return true
+    end
+  end
+
+  return false
+end
+
+---将val转为指定长度的16进制字符串
+---@param val number 数值
+---@param len number|nil 有效长度(4,8)
+---@param le boolean|nil 小端处理
+---@return string
+function utils.val_to_hex(val, len, le)
+  len = (len ~= nil) and len or 8
+  if not utils.val_in_set(len, { 4, 8 }) then
+    return ""
+  end
+
+  local str = string.format("%08x", val):upper()
+  if len < 8 then
+    str = string.sub(str, 8 - len + 1, 8)
+  end
+
+  local pairs = {}
+  if le then --小端
+    for i = len, 2, -2 do
+      table.insert(pairs, string.sub(str, i - 1, i))
+    end
+  else --大端
+    for i = 1, #str, 2 do
+      table.insert(pairs, string.sub(str, i, i + 1))
+    end
+  end
+
+  return table.concat(pairs, " ")
+end
+
+---使用字节值构建一个数值
+---@param le boolean 小端处理
+---@param bytes table 字节值
+---@return number
+function utils.val_from_byte(le, bytes)
+  local num_bytes = #bytes
+  if not utils.val_in_set(num_bytes, { 2, 4 }) then
+    return 0
+  end
+
+  local result = 0
+  for i, byte in ipairs(bytes) do
+    if byte < 0 or byte > 255 then
+      log.error(tag, "每个字节必须是0到255之间的整数")
+      return 0
+    end
+
+    byte = byte & 0xFF -- 确保只保留8位
+    if le then
+      result = result | byte << (8 * (i - 1))
+    else
+      result = result | byte << (8 * (num_bytes - i))
+    end
+  end
+
+  -- 处理符号（针对有符号整数）
+  if num_bytes == 2 then
+    if result >= 0x8000 then
+      result = result - 0x10000
+    end
+  elseif num_bytes == 4 then
+    if result >= 0x80000000 then
+      result = result - 0x100000000
+    end
+  end
+
+  return result
+end
+
+---------------------------------------------------------------------------------
+---将sTime转为时间
+---@param sTime string 时间字符串(y-m-d h:m:s)
+---@param zone boolean|nil 添加时区
+---@return number
+function utils.time_from_str(sTime, zone)
+  local year, month, day, hour, minute, second = sTime:match("(%d+)-(%d+)-(%d+) (%d+):(%d+):(%d+)")
+  local ret = os.time({
+    year = year,
+    month = month,
+    day = day,
+    hour = hour,
+    min = minute,
+    sec = second
+  })
+
+  if zone then
+    return ret + Time_zone_diff
+  else
+    return ret
+  end
+end
+
+---将sTime转为字符串
+---@param sTime any
+---@zone boolean|nil 添加时区
+---@return string|osdate
+function utils.time_to_str(sTime, zone)
+  if zone then
+    sTime = sTime + Time_zone_diff
+  end
+  return os.date("%Y-%m-%d %H:%M:%S", sTime)
+end
+
+---计算系统时区
+---@param str boolean|nil 返回文本描述
+---@return string|number
+function utils.time_get_zone(str)
+  local now = os.time()
+  local utc = os.date("!*t", now)
+  local offset = os.difftime(now, os.time({
+    year = utc.year,
+    month = utc.month,
+    day = utc.day,
+    hour = utc.hour,
+    min = utc.min,
+    sec = utc.sec
+  }))
+
+  if not str then
+    return offset
+  end
+
+  -- 转换为小时和分钟
+  local hours = math.floor(offset / 3600)
+  local minutes = math.floor((offset % 3600) / 60)
+
+  -- 处理半小时的情况，如+05:30
+  local secs = offset % 60
+  if secs ~= 0 then
+    minutes = minutes + (secs / 60)
+  end
+
+  return string.format("%02d:%02d", hours, minutes)
+end
+
+---------------------------------------------------------------------------------
 ---字符串转table
 ---@param value string 字符串
 ---@return table|nil
@@ -454,5 +382,8 @@ function utils.table_replace(tbl, old, new)
     end
   end
 end
+
+--初始化
+utils.init()
 
 return utils

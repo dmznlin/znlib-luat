@@ -19,31 +19,10 @@ function led.init()
     log.info(tag, k, utils.table_to_str(v))
     gpio.setup(v.pin, v.mode, v.init)
   end
-end
 
----点亮LED
----@param id string 名称
-function led.on(id)
-  local pin = options.pins[id]
-  if pin ~= nil then
-    gpio.set(pin.pin, pin.on)
-  end
-end
+  --不启用状态灯
+  if not options.enable then return end
 
----关闭LED
----@param id string 名称
-function led.off(id)
-  local pin = options.pins[id]
-  if pin ~= nil then
-    gpio.set(pin.pin, pin.off)
-  end
-end
-
--- 启动
-led.init()
-
---状态切换
-if options.enable then
   if options.pins["net"] then --网络灯
     sys.subscribe("IP_READY", function ()
       led.on("net")
@@ -74,5 +53,29 @@ if options.enable then
   end
 end
 
+---点亮LED
+---@param id string 名称
+function led.on(id)
+  if options.enable then
+    local pin = options.pins[id]
+    if pin ~= nil then
+      gpio.set(pin.pin, pin.on)
+    end
+  end
+end
+
+---关闭LED
+---@param id string 名称
+function led.off(id)
+  if options.enable then
+    local pin = options.pins[id]
+    if pin ~= nil then
+      gpio.set(pin.pin, pin.off)
+    end
+  end
+end
+
+-- 启动
+led.init()
 
 return led

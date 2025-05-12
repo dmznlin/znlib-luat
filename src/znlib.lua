@@ -35,9 +35,6 @@ Status_Mqtt_PubData = "mqtt_pub"
 device_id = mcu.unique_id():toHex()
 --设备ID,联网后会更新
 
---本地时间与UTC差值
-Time_zone_diff = utils.time_get_zone()
-
 local pm_a, pm_b, pm_reason = pm.lastReson()
 --开机原因,用于判断是从休眠模块开机,还是电源/复位开机
 
