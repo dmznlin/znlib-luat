@@ -32,8 +32,11 @@ Status_Mqtt_SubData = "mqtt_sub"
 Status_Mqtt_PubData = "mqtt_pub"
 --系统消息: mqtt发布数据
 
-device_id = mcu.unique_id():toHex()
+Device_ID = mcu.unique_id():toHex()
 --设备ID,联网后会更新
+
+Device_Expire = 0
+--设备过期时间(时间戳)
 
 local pm_a, pm_b, pm_reason = pm.lastReson()
 --开机原因,用于判断是从休眠模块开机,还是电源/复位开机
@@ -57,6 +60,29 @@ local options = {
 }
 
 ---------------------------------------------------------------------------------
+---计算系统过期时间
+---@param key string 秘钥
+---@param base number 过期时间
+---@return number
+---@return string
+function znlib.expire_check(key, base)
+  local cfg = require("znlib_cfg").load_default("key", {})
+  if cfg.expire == nil or cfg.key == nil then --无效配置
+    Device_Expire = base
+    return base, ""
+  end
+
+  local encrypt = crypto.md5(key .. cfg.expire)
+  if encrypt == cfg.key then
+    Device_Expire = utils.time_from_str(cfg.expire)
+  else
+    Device_Expire = base
+  end
+
+  return Device_Expire, encrypt
+end
+
+---------------------------------------------------------------------------------
 --全局消息管理
 Event = require("znlib_event")
 
@@ -67,9 +93,14 @@ EventType_MQTT_LOG = "mqtt_log"
 local remote_log_init = 0
 
 ---设置远程日志计时
----@param val number
-function znlib.remote_log_set(val)
-  remote_log_init = val
+---@param val number 时间(秒)
+---@param keep boolean|nil 保持
+function znlib.remote_log_set(val, keep)
+  if keep then
+    remote_log_init = os.difftime(os.time(), options.up_log) + val
+  else
+    remote_log_init = val
+  end
 end
 
 ---本地输出日志,或上行至服务器
@@ -274,13 +305,13 @@ function znlib.conn_net()
     -- LED = gpio.setup(12, 0, gpio.PULLUP)
     wlan.init()
     wlan.setMode(wlan.STATION) -- 默认也是这个模式,不调用也可以
-    device_id = wlan.getMac()
+    Device_ID = wlan.getMac()
     wlan.connect(ssid, password, 1)
   elseif mobile then
     -- Air780E/Air600E系列
     --mobile.simid(2) -- 自动切换SIM卡
     -- LED = gpio.setup(27, 0, gpio.PULLUP)
-    device_id = mobile.imei()
+    Device_ID = mobile.imei()
   elseif w5500 then
     -- w5500 以太网, 当前仅Air105支持
     w5500.init(spi.HSPI_0, 24000000, pin.PC14, pin.PC01, pin.PC00)
@@ -300,7 +331,7 @@ function znlib.conn_net()
 
   log.info(tag, "联网中,请稍后...")
   sys.waitUntil(Status_IP_Ready)
-  sys.publish(Status_Net_Ready, device_id)
+  sys.publish(Status_Net_Ready, Device_ID)
 end
 
 ---------------------------------------------------------------------------------

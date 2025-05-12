@@ -40,6 +40,10 @@ log.info(string.format("启动中，系统:%s 内核:%s 标识:%s", VERSION, rto
 --板载指示灯
 _G.led = require("znlib_led")
 
+--过期检查
+--local expire, encrypt = znlib.expire_check(PROJECT, utils.time_from_str("2025-10-10 10:00:00"))
+--log.info("过期时间", utils.time_to_str(expire), encrypt)
+
 sys.taskInit(function ()
   --开始联网
   znlib.conn_net()

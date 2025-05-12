@@ -77,7 +77,7 @@ function MQTT:open(client_id, cfg_name)
   self.client:keepalive(cfg.keep_alive)                  -- 默认值240s
   self.client:autoreconn(true, cfg.re_conn)              -- 自动重连机制
 
-  if self.offline ~= nil then                            --离线通知
+  if cfg.offline ~= nil then                             --离线通知
     local off = cfg.offline
     self.client:will(off.topic, off.msg, off.qos, off.retain)
   end
