@@ -230,7 +230,7 @@ function znlib.low_power_check()
         hour = l_h,
         min = l_m,
         sec = l_s
-      }) - Time_zone_diff
+      }) - Time_make_diff
 
       local l_out = os.time({ --退出时间
         year = dt.year,
@@ -239,7 +239,7 @@ function znlib.low_power_check()
         hour = e_h,
         min = e_m,
         sec = e_s
-      }) - Time_zone_diff
+      }) - Time_make_diff
 
       if l_in > l_out then --跨天退出
         dt = os.date("*t", cur + 24 * 3600);
@@ -250,7 +250,7 @@ function znlib.low_power_check()
           hour = e_h,
           min = e_m,
           sec = e_s
-        }) - Time_zone_diff
+        }) - Time_make_diff
       end
 
       --[[log.info("PM: 计时", os.date("%y-%m-%d %H:%M:%S", cur),

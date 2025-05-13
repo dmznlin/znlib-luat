@@ -8,9 +8,42 @@ local utils = {}
 --本地时间与UTC差值(秒)
 Time_zone_diff = 8 * 3600
 
+--[[
+  local tm = os.time({
+    year = 1970, month = 1, day = 1,
+    hour = 8, min = 0, sec = 0 --东8区
+  })
+  log.info("tm", tm)
+
+  上面的代码,在不同的系统上输出不同:
+  1、输出0: 表示 os.time 带有时区,以本地时间为参考
+  2、输出28800: 表示 os.time 不带时区,以 utc 时间为参考
+  3、时间戳: os.time()不带参数时,返回 utc 时间戳
+
+  例如本地时间 22:00:00 定时休眠: tm = os.time({hour = 22, min = 0, sec = 0}})
+  1、utc的休眠时间为 14:00:00 点,即 os.time() >= 14点即可休眠
+  2、若带时区,则 tm 已减去时区, 则可以和 os.time() 直接比对
+  3、若不带时区,则 tm 表示utc 22点,本地时间是次日6点
+
+  使用方法:
+  1、Time_make_diff 表示使用 os.time() 构建时间时, 起始 0 的大小
+  2、正确的 utc 时间为: os.time() - Time_make_diff
+--]]
+Time_make_diff = 0
+
 function utils.init()
   --校准时区
   Time_zone_diff = utils.time_get_zone()
+
+  --校准构建时间的时区差值
+  Time_make_diff = os.time({
+    year = 1970,
+    month = 1,
+    day = 1,
+    hour = math.floor(Time_zone_diff / 3600),
+    min = math.floor((Time_zone_diff % 3600) / 60),
+    sec = 0
+  })
 end
 
 ---------------------------------------------------------------------------------
@@ -35,7 +68,7 @@ function utils.make_id()
   end
 
   id_base = id_base + 1
-  return string.sub(device_id, #device_id - 5) .. str .. tostring(id_base)
+  return string.sub(Device_ID, #Device_ID - 5) .. str .. tostring(id_base)
 end
 
 ---系统信息
@@ -46,7 +79,7 @@ function utils.sys_info()
   info["sys.core"] = rtos.version()
 
   info["id.cpu"] = mcu.unique_id():toHex()
-  info["id.dev"] = device_id
+  info["id.dev"] = Device_ID
 
   info["mem.sys"] = string.format("%d,%d,%d", rtos.meminfo("sys")) -- 系统内存
   info["mem.lua"] = string.format("%d,%d,%d", rtos.meminfo("lua")) -- 虚拟机内存
@@ -245,7 +278,7 @@ function utils.time_from_str(sTime, zone)
     hour = hour,
     min = minute,
     sec = second
-  })
+  }) - Time_make_diff
 
   if zone then
     return ret + Time_zone_diff
