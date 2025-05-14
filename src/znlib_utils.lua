@@ -425,6 +425,68 @@ function utils.table_replace(tbl, old, new)
   end
 end
 
+---------------------------------------------------------------------------------
+---删除path及子目录和文件
+---@param path string 目录
+function utils.remove_all(path)
+  local ret, data = io.lsdir(path, 50, 0)
+  if not ret then
+    return
+  end
+
+  for _, e in ipairs(data) do
+    local fn = path .. e.name
+    if e.type == 1 then
+      utils.remove_all(fn .. "/")
+      log.info(tag, "remove dir", fn)
+      io.rmdir(fn)
+    else
+      os.remove(fn)
+      log.info(tag, "remove file", fn)
+    end
+  end
+
+  -- 继续遍历
+  if #data == 50 then
+    utils.remove_all(path)
+  end
+end
+
+---获取path及子目录的文件清单
+---@param path string 目录
+---@param list table|nil 扫描结果
+---@param offset number|nil 从第几个开始
+function utils.walk(path, list, offset)
+  log.info(tag, "walk")
+  offset = offset or 0
+
+  local ret, data = io.lsdir(path, 50, offset)
+  if not ret then
+    return
+  end
+
+  for _, e in ipairs(data) do
+    local fn = path .. e.name
+    if e.type == 1 then
+      log.info(tag, "walk", fn)
+      utils.walk(fn .. "/", list)
+    else
+      log.info(tag, "walk", fn, e.size)
+      if list then
+        table.insert(list, {
+          name = fn,
+          size = e.size
+        })
+      end
+    end
+  end
+
+  -- 继续遍历
+  if #data == 50 then
+    utils.walk(path, list, offset + 50)
+  end
+end
+
 --初始化
 utils.init()
 

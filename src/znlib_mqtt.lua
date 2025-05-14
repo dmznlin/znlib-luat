@@ -177,6 +177,10 @@ sys.taskInit(function ()
     local dt = { cmd = Cmd_Run_log, log = event }
     Mqtt_send(json.encode(dt))
   end)
+
+  sys.wait(1000)
+  --日志上行OK
+  sys.publish(EventType_MQTT_LOG)
 end)
 
 sys.taskInit(function ()
