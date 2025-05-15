@@ -426,6 +426,33 @@ function utils.table_replace(tbl, old, new)
 end
 
 ---------------------------------------------------------------------------------
+---获取path最后一级目录
+---@param path string 目录
+---@return string
+function utils.get_last_dir(path)
+  -- 将所有反斜杆替换为斜杆
+  path = path:gsub("\\", "/")
+
+  -- 修剪首尾的斜杆
+  path = path:gsub("^/+", "") -- 移除首的斜杆
+  path = path:gsub("/+$", "") -- 移除尾的斜杆
+
+  -- 如果路径为空，返回空字符串
+  if path == "" then
+    return ""
+  end
+
+  local rev_path = path:reverse()
+  --最后一个斜杠位置
+  local last_slash = rev_path:find("/")
+
+  if last_slash then -- 提取最后一级目录
+    return rev_path:sub(1, last_slash - 1):reverse()
+  else               -- 整个路径即为目录
+    return path
+  end
+end
+
 ---删除path及子目录和文件
 ---@param path string 目录
 function utils.remove_all(path)
@@ -469,7 +496,11 @@ function utils.walk(path, list, offset)
     local fn = path .. e.name
     if e.type == 1 then
       log.info(tag, "walk", fn)
-      utils.walk(fn .. "/", list)
+      local last_dir = utils.get_last_dir(fn)
+
+      if last_dir ~= "." and last_dir ~= ".." then
+        utils.walk(fn .. "/", list)
+      end
     else
       log.info(tag, "walk", fn, e.size)
       if list then

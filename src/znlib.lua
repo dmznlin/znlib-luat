@@ -85,6 +85,88 @@ function znlib.expire_check(key, base)
   return Device_Expire, encrypt
 end
 
+--[[
+  跨task通讯:
+  1、sys.waitUntil(topic)
+  2、sys.publish(topic)
+  这种方法有个缺陷: 如果 publish 先执行,后 waitUntil 将无法接收消息
+
+  解决方法:
+  1、topic 触发前调用 register_loop_topic
+  2、订阅topic获取触发结果和数据
+  3、循环 publish 结果和数据
+
+  调用演示:
+  znlib.register_loop_topic(Status_Net_Ready)   --网络正常
+  znlib.register_loop_topic(Status_NTP_Ready)   --时间同步完成
+  znlib.register_loop_topic(EventType_MQTT_LOG) --日志上行正常
+  znlib.start_loop_topic()
+--]]
+
+--循环触发主题列表
+local status_loop_topic = {}
+
+---注册一个需要循环触发的主题
+---@param topic string 主题名称
+---@param keep integer|nil 触发时长
+---@param interval integer|nil 触发间隔
+function znlib.register_loop_topic(topic, keep, interval)
+  local tb = {
+    active = false,                                    --未触发
+    keep = (keep ~= nil) and keep or 10 * 1000,        --持续触发10秒
+    interval = (interval ~= nil) and interval or 1000, --触发间隔1秒
+  }
+
+  local callback = function (...)
+    if not tb.active then
+      tb.active = true  --已触发
+      tb.last = 0       --未执行
+      tb.data = { ... } --触发数据
+    end
+  end
+
+  --关联回调
+  tb.callback = callback
+  --注册topic
+  status_loop_topic[topic] = tb
+
+  --订阅topic接收数据
+  sys.subscribe(topic, tb.callback)
+end
+
+---开启循环触发主题
+---@param interval integer|nil 触发间隔
+function znlib.start_loop_topic(interval)
+  sys.taskInit(function (ivl)
+    local keep = 0
+    for _, v in pairs(status_loop_topic) do
+      if v.keep > keep then --keep max
+        keep = v.keep
+      end
+    end
+
+    local idx = 0
+    while idx <= keep do
+      for k, v in pairs(status_loop_topic) do
+        if v.active and idx - v.last >= v.interval then --已触发
+          v.last = idx
+          sys.publish(k, table.unpack(v.data))
+        end
+      end
+
+      sys.wait(ivl)
+      idx = idx + ivl
+    end
+
+    for k, v in pairs(status_loop_topic) do
+      sys.unsubscribe(k, v.callback) --取消订阅
+    end
+
+    --清空主题列表
+    status_loop_topic = nil
+  end, (interval ~= nil and interval > 10) and interval or 200)
+end
+
 ---------------------------------------------------------------------------------
 --全局消息管理
 Event = require("znlib_event")
