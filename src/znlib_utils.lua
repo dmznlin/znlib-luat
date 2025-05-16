@@ -431,7 +431,7 @@ end
 ---@return string
 function utils.get_last_dir(path)
   -- 将所有反斜杆替换为斜杆
-  path = path:gsub("\\", "/")
+  -- path = path:gsub("\\", "/")
 
   -- 修剪首尾的斜杆
   path = path:gsub("^/+", "") -- 移除首的斜杆

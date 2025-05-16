@@ -131,6 +131,18 @@ function MQTT:publish(topic, payload, qos)
   return self.client:publish(topic, payload, qos)
 end
 
+---获取topic信息
+---@param topic string topic名称
+---@param sub boolean|nil 订阅主题
+---@return table
+function MQTT:topic_info(topic, sub)
+  if sub then
+    return self.subs[topic]
+  end
+
+  return self.pubs[topic]
+end
+
 --- 关闭平台（不太需要）
 function MQTT:close()
   if self.client ~= nil then
