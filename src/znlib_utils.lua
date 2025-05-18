@@ -425,6 +425,91 @@ function utils.table_replace(tbl, old, new)
   end
 end
 
+---打印出所有表结构
+---@param tb table 表结构
+---@param desc string|nil 表名称
+---@param nesting integer|nil 扫描深度
+---@param via boolean|nil 直接打印,不返回
+---@return string|nil
+function utils.table_dump(tb, desc, nesting, via)
+  if type(nesting) ~= "number" then nesting = 3 end
+
+  local lookupTable = {}
+  local result = {}
+
+  local function _v(v)
+    if type(v) == "string" then
+      v = "\"" .. v .. "\""
+    end
+    return tostring(v)
+  end
+
+  local function _dump(value, val_desc, indent, nest, key_len)
+    val_desc = val_desc or "<var>"
+    local spc = ""
+
+    if type(key_len) == "number" then
+      spc = string.rep(" ", key_len - string.len(_v(val_desc)))
+    end
+
+    if type(value) ~= "table" then
+      result[#result + 1] = string.format("%s%s%s = %s", indent, _v(val_desc), spc, _v(value))
+    elseif lookupTable[value] then
+      result[#result + 1] = string.format("%s%s%s = *REF*", indent, val_desc, spc)
+    else
+      lookupTable[value] = true
+      if nest > nesting then
+        result[#result + 1] = string.format("%s%s = *MAX NESTING*", indent, val_desc)
+      else
+        result[#result + 1] = string.format("%s%s = {", indent, _v(val_desc))
+        local indent2 = indent .. "    "
+        local keys = {}
+        local keys_len = 0
+        local values = {}
+
+        for k, v in pairs(value) do
+          keys[#keys + 1] = k
+          local vk = _v(k)
+          local vkl = string.len(vk)
+          if vkl > keys_len then keys_len = vkl end
+          values[k] = v
+        end
+
+        table.sort(keys, function (a, b)
+          if type(a) == "number" and type(b) == "number" then
+            return a < b
+          else
+            return tostring(a) < tostring(b)
+          end
+        end)
+
+        for i, k in ipairs(keys) do
+          _dump(values[k], k, indent2, nest + 1, keys_len)
+        end
+
+        result[#result + 1] = string.format("%s}", indent)
+      end
+    end
+  end
+
+  --dump table
+  _dump(tb, desc, "- ", 1)
+
+  if via == nil then via = true end
+  local dump_str = ""
+  for i, line in ipairs(result) do
+    if via then
+      log.info(tag, line)
+    else
+      dump_str = dump_str .. line .. "\n"
+    end
+  end
+
+  if not via then
+    return dump_str
+  end
+end
+
 ---------------------------------------------------------------------------------
 ---获取path最后一级目录
 ---@param path string 目录

@@ -15,7 +15,8 @@
         "utils",
         "znlib",
         "sntp",
-        "unregister"
+        "unregister",
+        "crypto"
     ],
     "Lua.diagnostics.globals": [
         "log",
@@ -36,6 +37,7 @@
         "zbuff",
         "uart_id",
         "mqtt",
-        "spi"
+        "spi",
+        "crypto"
     ]
 }
