@@ -16,7 +16,14 @@
         "znlib",
         "sntp",
         "unregister",
-        "crypto"
+        "crypto",
+        "modbus",
+        "addr",
+        "struct",
+        "sizeof",
+        "endian",
+        "uint",
+        "bool"
     ],
     "Lua.diagnostics.globals": [
         "log",

@@ -63,6 +63,20 @@ local options = {
 }
 
 ---------------------------------------------------------------------------------
+---编号基准
+local serial_base = 1
+
+---生成编号标识
+function znlib.make_id()
+  local id = serial_base
+  serial_base = serial_base + 1
+
+  if serial_base == 0x7FFFFFFF then --32位最大正整数,越界重置
+    serial_base = 1
+  end
+  return id
+end
+
 ---计算系统过期时间
 ---@param key string 秘钥
 ---@param base number 过期时间
@@ -145,17 +159,17 @@ function znlib.start_loop_topic(interval)
       end
     end
 
-    local idx = 0
-    while idx <= keep do
+    local now = 0
+    while now <= keep do
       for k, v in pairs(status_loop_topic) do
-        if v.active and idx - v.last >= v.interval then --已触发
-          v.last = idx
+        if v.active and now - v.last >= v.interval then --已触发
+          v.last = now
           sys.publish(k, table.unpack(v.data))
         end
       end
 
       sys.wait(ivl)
-      idx = idx + ivl
+      now = now + ivl
     end
 
     for k, v in pairs(status_loop_topic) do
