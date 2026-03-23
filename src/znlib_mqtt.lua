@@ -58,7 +58,7 @@ function MQTT:open(client_id, cfg_name)
     return false
   end
 
-  for k, v in pairs(cfg.subs) do
+  for _, v in pairs(cfg.subs) do
     log.info(tag, "sub", v.topic)
   end
 
@@ -73,6 +73,9 @@ function MQTT:open(client_id, cfg_name)
   self.pubs = cfg.pubs
   self.online = cfg.online
 
+  --辅助参数
+  self.utils = cfg.utils
+
   self.client:auth(self.id, cfg.user_name, cfg.password) -- 鉴权
   self.client:keepalive(cfg.keep_alive)                  -- 默认值240s
   self.client:autoreconn(true, cfg.re_conn)              -- 自动重连机制
@@ -86,7 +89,7 @@ function MQTT:open(client_id, cfg_name)
   self.client:on(function (client, event, topic, payload)
     if event == "conack" then
       local topics = {}
-      for k, v in pairs(self.subs) do
+      for _, v in pairs(self.subs) do
         topics[v.topic] = v.qos
       end
 
@@ -101,6 +104,7 @@ function MQTT:open(client_id, cfg_name)
     elseif event == "recv" then
       sys.publish(Status_Mqtt_SubData, topic, payload, self.id)
     elseif event == "sent" then
+      --do nothing
     elseif event == "disconnect" then
       log.info(tag, self.id, "已断开.")
     end

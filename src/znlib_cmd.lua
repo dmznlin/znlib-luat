@@ -4,9 +4,11 @@
 -------------------------------------------------------------------------------]]
 local tag     = "cmd-utils"
 local utils   = {
-  verify  = "verify",   --验证字段
-  key_des = "znlib-go", --加密秘钥
-  key_msg = ""          --消息秘钥
+  verify    = "verify",   --验证字段
+  ver_lower = true,       --验证小写
+  key_des   = "znlib-go", --加密秘钥
+  key_msg   = ""          --消息秘钥
+
 }
 utils.__index = utils
 
@@ -42,7 +44,7 @@ function utils:encode(cmd, order)
   local isLong, ver_item = nil, nil
   --检索verify字段
 
-  for idx, item in pairs(order) do
+  for _, item in pairs(order) do
     if isLong == nil then
       if cmd[item.long] ~= nil then
         isLong = true
@@ -67,7 +69,7 @@ function utils:encode(cmd, order)
 
   local en_cmd = function ()
     local data = "{"
-    for idx, item in pairs(order) do
+    for _, item in pairs(order) do
       local val = nil
       if isLong then
         val = cmd[item.long]
@@ -76,6 +78,17 @@ function utils:encode(cmd, order)
       end
 
       if val then
+        if item.omit then --零值时不提交
+          local tp = type(val)
+          if tp == "string" and val == "" then
+            goto continue
+          end
+
+          if tp == "number" and val == 0 then
+            goto continue
+          end
+        end
+
         if #data > 1 then
           data = data .. ","
         end
@@ -87,6 +100,9 @@ function utils:encode(cmd, order)
           data = data .. string.format('"%s"', val)
         end
       end
+
+      --跳转坐标
+      ::continue::
     end
 
     return data .. "}"
@@ -99,8 +115,11 @@ function utils:encode(cmd, order)
       cmd[ver_item.short] = self.key_msg
     end
 
-    local new_key = crypto.md5(en_cmd())
     --计算验证码
+    local new_key = crypto.md5(en_cmd())
+    if utils.ver_lower then --默认大写
+      new_key = string.lower(new_key)
+    end
 
     if isLong then
       cmd[ver_item.long] = new_key
@@ -129,7 +148,7 @@ function utils:decode(data, order)
 
   local isLong, ver_item = nil, nil
   --检索verify字段
-  for idx, item in pairs(order) do
+  for _, item in pairs(order) do
     if isLong == nil then
       if cmd[item.long] ~= nil then
         isLong = true
@@ -160,7 +179,7 @@ function utils:decode(data, order)
       old_key = cmd[ver_item.short]
     end
 
-    local tb, new_key = self:encode(cmd, order)
+    local _, new_key = self:encode(cmd, order)
     if new_key ~= old_key then
       return nil
     end
@@ -173,7 +192,7 @@ function utils:decode(data, order)
 
   --短字段名转长字段别名
   local cmd_new = {}
-  for idx, item in pairs(order) do
+  for _, item in pairs(order) do
     local val = cmd[item.short]
     if val then
       cmd_new[item.long] = val
@@ -188,15 +207,17 @@ return utils
 --[[-----------------------------------------------------------------------------
 local cmd = require("znlib_cmd"):new()
 cmd.verify = "verify"
+cmd.ver_lower = true
 cmd.key_msg = "我是消息秘钥"
 
 --编码顺序描述
 --short: 发送时短字段
 --long: 发开时长字段
+--omit: 零值时不提交
 local cmd_order = {
-  { short = "c", long = "cmd" },    --命令字
-  { short = "s", long = "sender" }, --发送方
-  { short = "v", long = "verify" }  --验证字段
+  { short = "c", long = "cmd" },                --命令字
+  { short = "s", long = "sender" },             --发送方
+  { short = "v", long = "verify", omit = true } --验证字段
 }
 
 --编码

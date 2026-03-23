@@ -542,7 +542,7 @@ function utils.table_dump(tb, desc, nesting, via)
           end
         end)
 
-        for i, k in ipairs(keys) do
+        for _, k in ipairs(keys) do
           _dump(values[k], k, indent2, nest + 1, keys_len)
         end
 
@@ -556,7 +556,7 @@ function utils.table_dump(tb, desc, nesting, via)
 
   if via == nil then via = true end
   local dump_str = ""
-  for i, line in ipairs(result) do
+  for _, line in ipairs(result) do
     if via then
       log.info(tag, line)
     else
